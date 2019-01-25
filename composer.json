@@ -1,5 +1,5 @@
 {
-    "name": "parfaitementweb/parfairement-starter-core",
+    "name": "parfaitementweb/wordpress-starter-core",
     "description": "Core business for our Parfaitement Starter Theme",
     "type": "library",
     "require": {
