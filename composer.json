@@ -19,5 +19,7 @@
             "src/Mix.php",
             "src/Asset.php"
         ]
-    }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }
