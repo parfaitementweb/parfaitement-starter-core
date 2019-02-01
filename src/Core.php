@@ -130,7 +130,7 @@ class Core
     {
         $templateData = [];
 
-        $controller_class = '\App\Controllers\\' . camel_case($class_name);
+        $controller_class = '\App\Controllers\\' . ucfirst(camel_case($class_name));
         if (class_exists($controller_class)) {
             $controller = new $controller_class;
 
