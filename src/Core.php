@@ -81,14 +81,22 @@ class Core
     public function filter_templates($templates)
     {
         $original = collect($templates);
-        $blade_versions = collect([]);
+        $output = collect([]);
 
-        $original->each(function ($item) use ($blade_versions) {
-            $blade_versions->push(str_replace('.php', '.blade.php', 'resources/views/' . $item));
-            $blade_versions->push(str_replace('.php', '.blade.php', $item));
+        $original->each(function ($item) use ($output) {
+
+            if (strpos($item, '.blade.php') === false) {
+                $output->push(str_replace('.php', '.blade.php', 'resources/views/' . $item));
+            }
+            $output->push('resources/views/' . $item);
+
+            if (strpos($item, '.blade.php') === false) {
+                $output->push(str_replace('.php', '.blade.php', $item));
+            }
+            $output->push($item);
         });
 
-        return $blade_versions->merge($original)->toArray();
+        return $output->toArray();
     }
 
     protected function enable_blade_compiler()
