@@ -7,6 +7,7 @@ use Illuminate\Config\Repository;
 use Illuminate\Container\Container;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Http\Request;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Engines\CompilerEngine;
 use Illuminate\View\Engines\EngineResolver;
@@ -16,7 +17,8 @@ use Illuminate\View\FileViewFinder;
 
 class Core
 {
-    public $config;
+    protected $config;
+    public $request = null;
 
     public function __construct()
     {
@@ -27,13 +29,13 @@ class Core
     {
         $this->load_environment();
         $this->load_config();
-        $this->add_blade_files_in_hierarchy();
-        $this->enable_blade_compiler();
-        $this->load_scripts();
+        $this->theme_scripts();
         $this->clean_wordpress();
+
+        $this->request = Request::capture();
     }
 
-    private function load_environment()
+    protected function load_environment()
     {
         if (file_exists(get_template_directory() . '/.env')) {
             $dotenv = Dotenv::create(get_template_directory());
@@ -41,116 +43,7 @@ class Core
         }
     }
 
-    public function blade_compiler($template)
-    {
-        if (strpos($template, '.blade.php') !== false) {
-            // Configuration
-            $pathsToTemplates = [get_template_directory() . $this->config->get('view.path', '/resources/views'), get_template_directory()];
-            $pathToCompiledTemplates = get_template_directory() . $this->config->get('view.compiled', '/compiled');
-            // Dependencies
-            $filesystem = new Filesystem;
-            $eventDispatcher = new Dispatcher(new Container);
-            // Create View Factory capable of rendering PHP and Blade templates
-            $viewResolver = new EngineResolver;
-            $bladeCompiler = new BladeCompiler($filesystem, $pathToCompiledTemplates);
-            $viewResolver->register('blade', function () use ($bladeCompiler) {
-                return new CompilerEngine($bladeCompiler);
-            });
-            $viewResolver->register('php', function () {
-                return new PhpEngine;
-            });
-            $viewFinder = new FileViewFinder($filesystem, $pathsToTemplates);
-            $viewFactory = new Factory($viewResolver, $viewFinder, $eventDispatcher);
-
-            // Get the name of the template file, without extensions
-            $clear_name = str_replace('.blade.php', '', basename($template));
-
-            $templateData = $this->get_template_data($clear_name);
-
-            $compiled = $viewFactory->make($clear_name, $templateData)->render();
-
-            echo $compiled;
-
-            return null;
-//            return get_template_directory() . '/index.php';
-        }
-
-        return $template;
-    }
-
-    public function filter_templates($templates)
-    {
-        $original = collect($templates);
-        $output = collect([]);
-
-        $original->each(function ($item) use ($output) {
-
-            if (strpos($item, '.blade.php') === false) {
-                $output->push(str_replace('.php', '.blade.php', 'resources/views/' . $item));
-            }
-            $output->push('resources/views/' . $item);
-
-            if (strpos($item, '.blade.php') === false) {
-                $output->push(str_replace('.php', '.blade.php', $item));
-            }
-            $output->push($item);
-        });
-
-        return $output->toArray();
-    }
-
-    protected function enable_blade_compiler()
-    {
-        add_filter('template_include', [$this, 'blade_compiler'], 99);
-    }
-
-    protected function add_blade_files_in_hierarchy()
-    {
-        collect([
-            'index',
-            '404',
-            'archive',
-            'author',
-            'category',
-            'tag',
-            'taxonomy',
-            'date',
-            'embed',
-            'home',
-            'frontpage',
-            'page',
-            'paged',
-            'search',
-            'single',
-            'singular',
-            'attachment',
-        ])->map(function ($type) {
-            add_filter("{$type}_template_hierarchy", [$this, 'filter_templates']);
-        });
-    }
-
-    /**
-     * @param $class_name
-     *
-     * @return mixed
-     */
-    protected function get_template_data($class_name)
-    {
-        $templateData = [];
-
-        $controller_class = '\App\Controllers\\' . ucfirst(camel_case($class_name));
-        if (class_exists($controller_class)) {
-            $controller = new $controller_class;
-
-            if (method_exists($controller, 'view')) {
-                $templateData = call_user_func([$controller, 'view']);
-            }
-        }
-
-        return $templateData;
-    }
-
-    public function load_config()
+    protected function load_config()
     {
         $configPath = get_template_directory() . '/config/';
         $this->config = new Repository([
@@ -159,18 +52,15 @@ class Core
         ]);
     }
 
-    public function theme_scripts()
+    protected function theme_scripts()
     {
-        wp_enqueue_style('theme-style', mix('main.css'), [], null, 'all');
-        wp_enqueue_script('theme-script', mix('app.js'), [], null, true);
+        add_action('wp_enqueue_scripts', function() {
+            wp_enqueue_style('theme-style', mix('main.css'), [], null, 'all');
+            wp_enqueue_script('theme-script', mix('app.js'), [], null, true);
+        });
     }
 
-    private function load_scripts()
-    {
-        add_action('wp_enqueue_scripts', [$this, 'theme_scripts']);
-    }
-
-    public function clean_wordpress()
+    protected function clean_wordpress()
     {
         $files = glob(__DIR__ . '/clean_wordpress/*.php');
         collect($files)->each(function ($file) {
@@ -178,6 +68,50 @@ class Core
             if (env($env_var, true)) {
                 require_once $file;
             }
+        });
+    }
+
+    public function render($template, $view_data)
+    {
+        // Configuration
+        $pathsToTemplates = [get_template_directory() . $this->config->get('view.path', '/resources/views'), get_template_directory()];
+        $pathToCompiledTemplates = get_template_directory() . $this->config->get('view.compiled', '/compiled/views');
+        // Dependencies
+        $filesystem = new Filesystem;
+        $eventDispatcher = new Dispatcher(new Container);
+        // Create View Factory capable of rendering PHP and Blade templates
+        $viewResolver = new EngineResolver;
+        $bladeCompiler = new BladeCompiler($filesystem, $pathToCompiledTemplates);
+        $viewResolver->register('blade', function () use ($bladeCompiler) {
+            return new CompilerEngine($bladeCompiler);
+        });
+        $viewResolver->register('php', function () {
+            return new PhpEngine;
+        });
+        $viewFinder = new FileViewFinder($filesystem, $pathsToTemplates);
+        $viewFactory = new Factory($viewResolver, $viewFinder, $eventDispatcher);
+
+        // Get the name of the template file, without extensions
+        $clear_name = str_replace(['.blade.php', '.php'], '', basename($template));
+
+        $compiled = $viewFactory->make($clear_name, $view_data)->render();
+
+        echo $compiled;
+
+        return null;
+    }
+
+    public function include_style($path)
+    {
+        add_action('wp_enqueue_scripts', function () use ($path) {
+            wp_enqueue_style(str_replace(['.css', '.js'], '', $path), mix($path), [], null, 'all');
+        });
+    }
+
+    public function include_script($path)
+    {
+        add_action('wp_enqueue_scripts', function () use ($path) {
+            wp_enqueue_script(str_replace(['.css', '.js'], '', $path), mix($path), [], null, true);
         });
     }
 }
