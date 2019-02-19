@@ -2,6 +2,7 @@
     "name": "parfaitementweb/wordpress-starter-core",
     "description": "Core business for our Parfaitement Starter Theme",
     "type": "library",
+    "license": "MIT",
     "require": {
         "php": "^7.1.3",
         "illuminate/view": "^5.7",
