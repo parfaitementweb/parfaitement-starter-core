@@ -76,6 +76,11 @@ class Core
         // Configuration
         $pathsToTemplates = [get_template_directory() . $this->config->get('view.path', '/resources/views'), get_template_directory()];
         $pathToCompiledTemplates = get_template_directory() . $this->config->get('view.compiled', '/compiled/views');
+
+        if (! file_exists(get_template_directory() . $this->config->get('view.compiled', '/compiled/views'))) {
+            die('Folder ' . get_template_directory() . $this->config->get('view.compiled', '/compiled/views') . ' does not exist.');
+        }
+
         // Dependencies
         $filesystem = new Filesystem;
         $eventDispatcher = new Dispatcher(new Container);
