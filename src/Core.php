@@ -14,11 +14,19 @@ use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
+use Illuminate\Translation\FileLoader;
+use Illuminate\Translation\Translator;
+use Illuminate\Validation\Factory as ValidationFactory;
 
 class Core
 {
     protected $config;
+
+    public $container = null;
+
     public $request = null;
+
+    public $validation = null;
 
     public function __construct()
     {
@@ -27,8 +35,11 @@ class Core
 
     protected function init()
     {
+        $this->container = new Container();
+
         $this->load_environment();
         $this->load_config();
+        $this->load_validation();
         $this->theme_scripts();
         $this->clean_wordpress();
 
@@ -54,7 +65,7 @@ class Core
 
     protected function theme_scripts()
     {
-        add_action('wp_enqueue_scripts', function() {
+        add_action('wp_enqueue_scripts', function () {
             wp_enqueue_style('theme-style', mix('main.css'), [], null, 'all');
             wp_enqueue_script('theme-script', mix('app.js'), [], null, true);
         });
@@ -83,7 +94,7 @@ class Core
 
         // Dependencies
         $filesystem = new Filesystem;
-        $eventDispatcher = new Dispatcher(new Container);
+        $eventDispatcher = new Dispatcher($this->container);
         // Create View Factory capable of rendering PHP and Blade templates
         $viewResolver = new EngineResolver;
         $bladeCompiler = new BladeCompiler($filesystem, $pathToCompiledTemplates);
@@ -118,6 +129,16 @@ class Core
         add_action('wp_enqueue_scripts', function () use ($path) {
             wp_enqueue_script(str_replace(['.css', '.js'], '', $path), mix($path), [], null, true);
         });
+    }
+
+    public function load_validation()
+    {
+        $wp_locale = substr(get_locale(), 0, 2);
+        $locale = in_array($wp_locale, ['fr', 'nl', 'en']) ? $wp_locale : 'en';
+
+        $loader = new FileLoader(new Filesystem, __DIR__ . '/lang');
+        $translator = new Translator($loader, $locale);
+        $this->validation = new ValidationFactory($translator, $this->container);
     }
 }
 
