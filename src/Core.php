@@ -42,6 +42,7 @@ class Core
         $this->load_validation();
         $this->theme_scripts();
         $this->clean_wordpress();
+        $this->start_session();
 
         $this->request = Request::capture();
     }
@@ -114,6 +115,8 @@ class Core
 
         echo $compiled;
 
+        $this->close_session();
+
         return null;
     }
 
@@ -139,6 +142,23 @@ class Core
         $loader = new FileLoader(new Filesystem, __DIR__ . '/lang');
         $translator = new Translator($loader, $locale);
         $this->validation = new ValidationFactory($translator, $this->container);
+    }
+
+    public function start_session()
+    {
+        session_start([
+            'name' => env('COOKIE_NAME', 'wp_custom_session'),
+            'cookie_lifetime' => 1440,
+            'cookie_domain' => $_SERVER['SERVER_NAME'],
+            'cookie_secure' => isset($_SERVER['HTTPS']),
+            'cookie_httponly' => true,
+        ]);
+    }
+
+    static function close_session()
+    {
+        unset($_SESSION['old']);
+        unset($_SESSION['success']);
     }
 }
 
